@@ -6,7 +6,6 @@ import requests
 
 import os
 from dotenv import dotenv_values
-import torch
 
 from bs4 import BeautifulSoup
 import truthbrush as tb
@@ -145,7 +144,7 @@ def get_last_post_id():
 
 
 def main():
-    print(f"Starting Trump Truth Social monitor at {datetime.now()}")
+    print(f"Starting Truth Social monitor at {datetime.now()}")
 
     last_post_id = get_last_post_id()
     print(f"Last processed post ID: {last_post_id}")

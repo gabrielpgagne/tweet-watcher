@@ -1,0 +1,29 @@
+[project]
+name = "stock-watcher"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "accelerate>=1.6.0",
+    "bitsandbytes>=0.45.5",
+    "bs4>=0.0.2",
+    "python-dotenv>=1.1.0",
+    "torch>=2.6.0",
+    "transformers>=4.51.3",
+    "truthbrush",
+]
+
+[tool.uv.sources]
+truthbrush = { git = "https://github.com/stanfordio/truthbrush.git" }
+torch = [
+    { index = "pytorch-cu124", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+torchvision = [
+    { index = "pytorch-cu124", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true

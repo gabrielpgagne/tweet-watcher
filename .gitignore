@@ -1,0 +1,12 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+last_trump_post.json
+
+# Virtual environments
+.venv
+.env

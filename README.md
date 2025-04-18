@@ -15,6 +15,7 @@ The project loads a few configurations from an env file located in the root of t
 ```bash
 TRUTHSOCIAL_USERNAME="foo"
 TRUTHSOCIAL_PASSWORD="bar"
+TRUTHSOCIAL_HANDLE="realDonaldTrump"
 NTFY_TOPIC="my-ntfy-topic"
 OLLAMA_MODEL="llama3.2:3b"
 ```

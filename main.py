@@ -1,12 +1,11 @@
 import json
 import time
 from datetime import datetime, timedelta, timezone
-
+import logging
 import requests
-
 import os
-from dotenv import dotenv_values
 
+from dotenv import dotenv_values
 from bs4 import BeautifulSoup
 import truthbrush as tb
 import ollama
@@ -18,6 +17,7 @@ CHECK_INTERVAL = 300  # Check every 5 minutes (in seconds)
 
 # File to store the latest post ID we've seen
 LAST_POST_FILE = "last_trump_post.json"
+logger = logging.getLogger("my_logger")
 
 
 def extract_paragraph_text(html_string):
@@ -53,12 +53,12 @@ def get_latest_posts(since_id=None):
             created_after = datetime.now(timezone.utc) - timedelta(days=1)
 
         truths = api.pull_statuses(
-            "realDonaldTrump", since_id=since_id, created_after=created_after
+            CONFIG["TRUTHSOCIAL_HANDLE"], since_id=since_id, created_after=created_after
         )
 
         return list(truths)
     except Exception as e:
-        print(f"Error fetching posts: {e}")
+        logger.error(f"Error fetching posts: {e}")
         return []
 
 
@@ -76,14 +76,13 @@ def analyze_with_llm(post_content):
             },
             {"role": "user", "content": post_content},
         ]
-
         output = ollama.chat(
             model=CONFIG["OLLAMA_MODEL"],
             messages=message,
         )
 
     except Exception as e:
-        print(f"Error analyzing with LLM: {e}")
+        logger.error(f"Error analyzing with LLM: {e}")
         return False, f"Error: {e}"
     else:
         response = output["message"]["content"]
@@ -101,15 +100,16 @@ def send_notification(content, analysis):
     try:
         message = f"{content}\n\nAnalysis: {analysis}"
         requests.post(f"https://ntfy.sh/{CONFIG['NTFY_TOPIC']}", data=message)
-        print(f"Notification sent at {datetime.now()}")
+        logger.debug(f"Notification sent at {datetime.now()}")
     except Exception as e:
-        print(f"Error sending notification: {e}")
+        logger.error(f"Error sending notification: {e}")
 
 
 def save_last_post_id(post_id):
     """Save the ID of the last processed post."""
     with open(LAST_POST_FILE, "w") as f:
         json.dump({"last_post_id": post_id}, f)
+    logger.debug(f"Saved last post ID: {post_id}")
 
 
 def get_last_post_id():
@@ -122,19 +122,19 @@ def get_last_post_id():
 
 
 def main():
-    print(f"Starting Truth Social monitor at {datetime.now()}")
+    logger.debug(f"Starting social monitor at {datetime.now()}")
 
     ollama.pull(model=CONFIG["OLLAMA_MODEL"])
 
     last_post_id = get_last_post_id()
-    print(f"Last processed post ID: {last_post_id}")
+    logger.info(f"Last processed post ID: {last_post_id}")
 
     while True:
-        print(f"Checking for new posts at {datetime.now()}")
+        logger.info(f"Checking for new posts at {datetime.now()}")
         posts = get_latest_posts(last_post_id)
 
         if not posts:
-            print("No posts found or error occurred")
+            logger.info("No posts found or error occurred")
             time.sleep(CHECK_INTERVAL)
             continue
 
@@ -144,21 +144,23 @@ def main():
 
         # If we've seen this post before, skip
         if newest_post["id"] == last_post_id:
-            print("No new posts found")
+            logger.info("No new posts found")
             time.sleep(CHECK_INTERVAL)
             continue
 
-        print(f"New post found: {newest_post['id']}")
+        logger.info(f"New post: {newest_post['id']} (UTC {newest_post['created_at']})")
 
         if content := "\n".join(extract_paragraph_text(newest_post["content"])):
             # Analyze the post
             could_impact_market, analysis = analyze_with_llm(content)
 
             if could_impact_market:
-                print("Post could impact market. Sending notification.")
+                logger.info(f"Post could impact market:\n\n{content}\n\n{analysis}")
                 send_notification(content, analysis)
             else:
-                print("Post unlikely to impact market.")
+                logger.info(
+                    f"Post unlikely to impact market:\n\n{content}\n\n{analysis}"
+                )
 
         # Update the last post ID
         save_last_post_id(newest_post["id"])
@@ -169,4 +171,18 @@ def main():
 
 
 if __name__ == "__main__":
+    # Create a logger
+    logger.setLevel(logging.DEBUG)  # Set the minimum level to capture
+
+    # Formatter
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+
+    # File handler
+    file_handler = logging.FileHandler("watcher.log")
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+
+    # Add handlers to the logger
+    logger.addHandler(file_handler)
+
     main()

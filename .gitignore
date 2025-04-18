@@ -5,7 +5,10 @@ build/
 dist/
 wheels/
 *.egg-info
-last_trump_post.json
+
+# Runtime files
+last_post.json
+watcher.log
 
 # Virtual environments
 .venv

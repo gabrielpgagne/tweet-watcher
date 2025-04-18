@@ -9,21 +9,12 @@ from dotenv import dotenv_values
 
 from bs4 import BeautifulSoup
 import truthbrush as tb
-from transformers import pipeline
+import ollama
 
 CONFIG = dotenv_values(".env")
 
 # Configuration
 CHECK_INTERVAL = 300  # Check every 5 minutes (in seconds)
-
-# TODO used quantized model: https://huggingface.co/MaziyarPanahi/gemma-3-4b-it-GGUF
-pipe = pipeline(
-    "text-generation",
-    model=CONFIG["HF_MODEL"],
-    # model=model,
-    device=0,
-    token=CONFIG["HF_API_TOKEN"],
-)
 
 # File to store the latest post ID we've seen
 LAST_POST_FILE = "last_trump_post.json"
@@ -74,46 +65,33 @@ def get_latest_posts(since_id=None):
 def analyze_with_llm(post_content):
     """
     Send the post content to an LLM to analyze potential stock market impact.
-    https://huggingface.co/google/gemma-3-1b-it
     """
-    global pipe
     try:
         message = [
-            [
-                {
-                    "role": "system",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": """
-                         Based on the input tweet, is there a reasonable likelihood it could impact the stock market? 
-                         Consider mentions of companies, industries, economic policies, trade deals, or other market-relevant information. 
-                         Answer with 'Yes' or 'No' first, followed by a brief explanation.""",
-                        },
-                    ],
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": post_content,
-                        },
-                    ],
-                },
-            ],
+            {
+                "role": "system",
+                "content": """Based on the input tweet, is there a reasonable likelihood it could indicate a buy, sell or hold of stocks in the market?
+                         Consider mentions of companies, industries, economic policies, trade deals, or other market-relevant information.
+                         Answer with 'Yes' or 'No' first, followed by an explanation of 50 words or less.""",
+            },
+            {"role": "user", "content": post_content},
         ]
-        output = pipe(message, max_new_tokens=100)
 
-        response = output[0][0]["generated_text"][-1]["content"]
+        output = ollama.chat(
+            model=CONFIG["OLLAMA_MODEL"],
+            messages=message,
+        )
+
+    except Exception as e:
+        print(f"Error analyzing with LLM: {e}")
+        return False, f"Error: {e}"
+    else:
+        response = output["message"]["content"]
 
         # Check if the analysis starts with "Yes"
         could_impact_market = response.startswith("Yes")
 
         return could_impact_market, response
-    except Exception as e:
-        print(f"Error analyzing with LLM: {e}")
-        return False, f"Error: {e}"
 
 
 def send_notification(content, analysis):
@@ -122,7 +100,7 @@ def send_notification(content, analysis):
     """
     try:
         message = f"{content}\n\nAnalysis: {analysis}"
-        requests.post("https://ntfy.sh/nederhome-ts", data=message)
+        requests.post(f"https://ntfy.sh/{CONFIG['NTFY_TOPIC']}", data=message)
         print(f"Notification sent at {datetime.now()}")
     except Exception as e:
         print(f"Error sending notification: {e}")
@@ -145,6 +123,8 @@ def get_last_post_id():
 
 def main():
     print(f"Starting Truth Social monitor at {datetime.now()}")
+
+    ollama.pull(model=CONFIG["OLLAMA_MODEL"])
 
     last_post_id = get_last_post_id()
     print(f"Last processed post ID: {last_post_id}")
